@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server
+    container_name: mikrotik-clickhouse
+    ports:
+      - "${CLICKHOUSE_PORT:-9000}:9000"
+      - "8123:8123"
+    environment:
+      - CLICKHOUSE_USER=${CLICKHOUSE_USER:-default}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-}
+      - CLICKHOUSE_DB=${CLICKHOUSE_DB:-mikro_traffic}
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    volumes:
+      - ./clickhouse_data:/var/lib/clickhouse
+    restart: unless-stopped
+
+  app:
+    build: .
+    container_name: mikrotik-metric-app
+    depends_on:
+      - clickhouse
+    environment:
+      - MIKROTIK_ROUTER_IP=${MIKROTIK_ROUTER_IP}
+      - MIKROTIK_API_USER=${MIKROTIK_API_USER}
+      - MIKROTIK_API_PASSWORD=${MIKROTIK_API_PASSWORD}
+      - MIKROTIK_VERIFY_SSL=${MIKROTIK_VERIFY_SSL}
+      - SCRAPE_INTERVAL=${SCRAPE_INTERVAL}
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PORT=9000
+      - CLICKHOUSE_USER=${CLICKHOUSE_USER}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
+      - CLICKHOUSE_DB=${CLICKHOUSE_DB}
+      - CLICKHOUSE_TABLE=${CLICKHOUSE_TABLE}
+      - GEOIP_DB_DIR=/app
+      - UA=${UA}
+    volumes:
+      # Mount GeoIP database files if they exist locally
+      - ./GeoLite2-Country.mmdb:/app/GeoLite2-Country.mmdb:ro
+      - ./GeoLite2-City.mmdb:/app/GeoLite2-City.mmdb:ro
+    restart: unless-stopped
