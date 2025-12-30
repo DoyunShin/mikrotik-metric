@@ -18,6 +18,22 @@ import roul.thread
 # Disable InsecureRequestWarning
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+# --- Load .env file manually if exists (without python-dotenv) ---
+if os.path.exists('.env'):
+    try:
+        with open('.env', 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                if '=' in line:
+                    key, value = line.split('=', 1)
+                    # Remove potential quotes around values
+                    value = value.strip().strip("'").strip('"')
+                    os.environ[key.strip()] = value
+    except Exception as e:
+        print(f"Warning: Failed to load .env file: {e}", file=sys.stderr)
+
 # --- MikroTik REST API Connection Settings ---
 ROUTER_IP = os.getenv('MIKROTIK_ROUTER_IP', '192.168.90.1')
 API_USER = os.getenv('MIKROTIK_API_USER', 'api_user')
