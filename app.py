@@ -7,6 +7,7 @@ import geoip2.database
 from datetime import datetime
 from clickhouse_driver import Client
 from hashlib import sha256
+from functools import lru_cache
 import requests
 import urllib3
 import roul
@@ -23,7 +24,7 @@ API_USER = os.getenv('MIKROTIK_API_USER', 'api_user')
 API_PASSWORD = os.getenv('MIKROTIK_API_PASSWORD', 'your_password')
 API_BASE_URL = f"https://{ROUTER_IP}/rest"
 VERIFY_SSL = bool(os.getenv('MIKROTIK_VERIFY_SSL', 'False').lower() in ('true', '1', 't'))
-SCRAPE_INTERVAL = int(os.getenv('SCRAPE_INTERVAL', '5'))
+SCRAPE_INTERVAL = int(os.getenv('SCRAPE_INTERVAL', '10'))
 
 # --- ClickHouse Database Settings ---
 CLICKHOUSE_HOST = os.getenv('CLICKHOUSE_HOST', 'localhost')
@@ -102,6 +103,7 @@ def is_ip_private(ip_str: str) -> bool:
     except ValueError:
         return False
 
+@lru_cache(maxsize=16384)
 def get_geo_info_from_ip(ipaddr: str):
     if not roul.ip.is_valid(ipaddr):
         raise ValueError(f"Invalid IP address: {ipaddr}")
@@ -172,18 +174,27 @@ def get_geo_info_from_ip(ipaddr: str):
     return data
 
 def collect_and_push_metrics():
+    print(f"[{time.ctime()}] Cycle Started.")
+    start_ts = time.time()
     try:
         session = requests.Session()
         session.auth = (API_USER, API_PASSWORD)
         connections_url = f"{API_BASE_URL}/ip/firewall/connection"
+        
+        # Measure API fetch time
+        api_start = time.time()
         connection_response = session.get(connections_url, verify=VERIFY_SSL, timeout=30)
         connection_response.raise_for_status()
         connections = connection_response.json()
-        print(f"[{time.ctime()}] Successfully fetched {len(connections)} connections.")
+        api_duration = time.time() - api_start
+        
+        # print(f"[{time.ctime()}] Fetched {len(connections)} connections in {api_duration:.2f}s.")
 
         records_to_insert = []
         current_time = datetime.now()
 
+        # Measure Processing time
+        process_start = time.time()
         for conn in connections:
             _id = conn.get('.id', '0')
             src_address_full = conn.get('src-address', 'unknown')
@@ -290,11 +301,20 @@ def collect_and_push_metrics():
                 print(f"[{time.ctime()}] Skipping record due to error: {e}", file=sys.stderr)
                 continue
 
+        process_duration = time.time() - process_start
+        
         if records_to_insert:
-            print(f"[{time.ctime()}] Pushing {len(records_to_insert)} records to ClickHouse...")
+            # Measure DB Insert time
+            db_start = time.time()
             client = Client(host=CLICKHOUSE_HOST, port=CLICKHOUSE_PORT, user=CLICKHOUSE_USER, password=CLICKHOUSE_PASSWORD, database=CLICKHOUSE_DB)
             client.execute(f"INSERT INTO {CLICKHOUSE_TABLE} VALUES", records_to_insert)
-            print(f"[{time.ctime()}] Successfully pushed {len(records_to_insert)} records.")
+            db_duration = time.time() - db_start
+            
+            total_duration = time.time() - start_ts
+            print(f"[{time.ctime()}] Inserted {len(records_to_insert)} records. (API: {api_duration:.2f}s, Proc: {process_duration:.2f}s, DB: {db_duration:.2f}s, Total: {total_duration:.2f}s)")
+            
+            # if total_duration > SCRAPE_INTERVAL * 0.8:
+            #     print(f"WARNING: Scrape took {total_duration:.2f}s, which is close to or exceeds interval {SCRAPE_INTERVAL}s!", file=sys.stderr)
         else:
             print(f"[{time.ctime()}] No records to push.")
 
