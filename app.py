@@ -232,7 +232,7 @@ def collect_and_push_metrics(retry: bool = False):
             timeout_str = conn.get('timeout', '0')
             timeout = parse_timeout(timeout_str)
             
-            connection_id = sha256(f"{_id}{src_address_full}{dst_address_full}{protocol}".encode()).digest()
+            connection_id = sha256(f"{_id}{src_address_full}{dst_address_full}{protocol}".encode()).hexdigest()
             
             if protocol == "tcp":
                 tcp_state = conn.get('tcp-state', 'unknown')
