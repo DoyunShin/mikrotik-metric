@@ -189,7 +189,7 @@ def get_geo_info_from_ip(ipaddr: str):
 
     return data
 
-def collect_and_push_metrics():
+def collect_and_push_metrics(retry: bool = False):
     print(f"[{time.ctime()}] Cycle Started.")
     start_ts = time.time()
     try:
@@ -336,6 +336,10 @@ def collect_and_push_metrics():
 
     except requests.exceptions.RequestException as e:
         print(f"[{time.ctime()}] Error connecting to MikroTik REST API: {e}", file=sys.stderr)
+        if not retry:
+            print(f"[{time.ctime()}] Retrying now")
+            time.sleep(0.2)
+            collect_and_push_metrics(retry=True)
     except Exception as e:
         print(f"[{time.ctime()}] An unexpected error occurred: {e}", file=sys.stderr)
 
