@@ -169,7 +169,7 @@ def get_geo_info_from_ip(ipaddr: str):
         print(f"Error fetching city info for {ipaddr}: {e}", file=sys.stderr)
         city_name = ""
     
-    iso_code = "" if not iso_code else iso_code
+    iso_code = "" if not iso_code else str(iso_code)[:2]
     full_name = "" if not full_name else full_name
     asn = 0 if not asn else asn
     asn_name = "" if not asn_name else asn_name
@@ -384,7 +384,7 @@ CREATE TABLE IF NOT EXISTS {CLICKHOUSE_TABLE} (
     current_time           DateTime,
 
     -- 각 연결에 부여하는 SHA-256 해시
-    connection_id          FixedString(32),
+    connection_id          FixedString(64),
 
     -- 트래픽 주소 및 포트 필드
     src_ip                 IPv4,
